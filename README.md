@@ -7,5 +7,9 @@ Clicking on the event should link you directly back to LeekDuck.
 
 Huge shoutout to LeekDuck! (and ofc ScrapedDuck)
 
+Updates:
+14/7/26 - added the ability to add custom events 
+(these are saved in your browser's local storage, so anything you add is visible only on your device)
+
 Updates planned:
-Special events in specific locations (ie. Londons August event)
+adding a backend
