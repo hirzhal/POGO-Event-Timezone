@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Event Board — World Clock · Pokémon GO Events</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: radial-gradient(circle at 20% -10%, #1b2027 0%, #0B0D10 55%);
+    color: #ECEDE9;
+    font-family: 'Space Grotesk', sans-serif;
+    min-height: 100vh;
+  }
+  .board { padding: 28px 20px 60px; }
+  .header { max-width: 1180px; margin: 0 auto 24px; }
+  .eyebrow-top {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #43D9C8;
+    margin-bottom: 6px;
+  }
+  .title { font-size: clamp(24px, 4vw, 34px); font-weight: 700; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .subtitle { color: #8B93A1; font-size: 13px; margin: 0; }
+  .status-row {
+    display: flex; align-items: center; gap: 8px; margin-top: 14px;
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #8B93A1;
+  }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .refresh-btn {
+    background: none; border: none; color: #8B93A1; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 4px;
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px;
+    padding: 2px 6px; border-radius: 4px;
+  }
+  .refresh-btn:hover { color: #ECEDE9; background: rgba(255,255,255,0.06); }
+
+  .add-zone { max-width: 1180px; margin: 20px auto 0; position: relative; }
+  .add-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .add-input-wrap { position: relative; flex: 1 1 240px; min-width: 200px; }
+  .add-input {
+    width: 100%; background: #14171C; border: 1px solid rgba(255,255,255,0.09);
+    color: #ECEDE9; padding: 9px 12px; border-radius: 8px;
+    font-family: 'IBM Plex Mono', monospace; font-size: 13px; outline: none;
+  }
+  .add-input:focus { border-color: #43D9C8; }
+  .suggestions {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+    background: #14171C; border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 8px; overflow: hidden; z-index: 10; max-height: 260px; overflow-y: auto;
+  }
+  .suggestion-item {
+    padding: 8px 12px; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px;
+    cursor: pointer; color: #ECEDE9;
+  }
+  .suggestion-item:hover { background: rgba(67,217,200,0.12); }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #14171C; border: 1px solid rgba(255,255,255,0.09);
+    color: #8B93A1; padding: 7px 11px; border-radius: 20px; font-size: 12px;
+    cursor: pointer; font-family: 'IBM Plex Mono', monospace;
+  }
+  .chip:hover { color: #ECEDE9; border-color: #43D9C8; }
+
+  .grid {
+    max-width: 1180px; margin: 26px auto 0; display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 16px;
+  }
+  .card { background: #14171C; border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 18px 18px 16px; }
+  .card-head { display: flex; justify-content: space-between; align-items: flex-start; }
+  .head-right { display: flex; align-items: center; gap: 8px; color: #8B93A1; }
+  .icon-btn {
+    background: none; border: none; color: #8B93A1; cursor: pointer;
+    padding: 2px; border-radius: 4px; display: inline-flex; font-size: 14px; line-height: 1;
+  }
+  .icon-btn:hover { color: #FF6B4A; background: rgba(255,107,74,0.1); }
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: #8B93A1; margin-bottom: 2px;
+  }
+  .city-name { font-size: 19px; font-weight: 700; margin: 0; }
+
+  .clock {
+    margin: 14px 0 4px; display: flex; align-items: baseline; gap: 2px;
+    font-family: 'IBM Plex Mono', monospace; font-size: 34px; font-weight: 600; letter-spacing: 0.01em;
+  }
+  .colon { color: #43D9C8; padding: 0 1px; }
+  .flap-wrap { display: inline-block; overflow: hidden; min-width: 1.1ch; }
+  .flap-digit { display: inline-block; animation: flip 0.35s ease-out; }
+  @keyframes flip {
+    0% { transform: translateY(-55%) scaleY(0.4); opacity: 0.3; filter: blur(1px); }
+    60% { transform: translateY(4%) scaleY(1.05); opacity: 1; }
+    100% { transform: translateY(0) scaleY(1); opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) { .flap-digit { animation: none; } }
+
+  .divider { height: 1px; background: rgba(255,255,255,0.08); margin: 14px 0 12px; }
+  .section-label {
+    font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: #43D9C8; margin-bottom: 8px;
+  }
+  .section-label-upcoming { color: #8B93A1; margin-top: 14px; }
+  .empty-line { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #565D6A; margin-bottom: 6px; }
+  .event-row { display: flex; gap: 9px; margin-bottom: 9px; }
+  .tag { width: 4px; border-radius: 3px; flex-shrink: 0; }
+  .event-text { min-width: 0; }
+  .event-name { font-size: 13px; font-weight: 600; line-height: 1.25; }
+  .event-name a { color: inherit; text-decoration: none; }
+  .event-name a:hover { text-decoration: underline; }
+  .event-sub { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8B93A1; margin-top: 1px; }
+
+  .notice-banner {
+    max-width: 1180px; margin: 16px auto 0; display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; border-radius: 8px; font-size: 12.5px; font-family: 'IBM Plex Mono', monospace;
+  }
+  .notice-banner.warn { background: rgba(255,176,32,0.08); border: 1px solid rgba(255,176,32,0.25); color: #FFD08A; }
+
+  .footer-note {
+    max-width: 1180px; margin: 26px auto 0; font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px; color: #565D6A;
+  }
+</style>
+</head>
+<body>
+<div class="board">
+  <div class="header">
+    <div class="eyebrow-top">World Clock · Pokémon GO Events</div>
+    <h1 class="title">Event Board</h1>
+    <p class="subtitle">Live local time and active events across the zones you're tracking.</p>
+    <div class="status-row">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="statusText">Loading events…</span>
+      <button class="refresh-btn" id="refreshBtn">↻ refresh</button>
+    </div>
+  </div>
+
+  <div id="noticeBanner"></div>
+
+  <div class="add-zone">
+    <div class="add-row">
+      <div class="add-input-wrap">
+        <input class="add-input" id="addInput" placeholder="Add a timezone or city…" autocomplete="off" />
+        <div class="suggestions" id="suggestions" style="display:none;"></div>
+      </div>
+      <div id="quickAddRow" style="display:contents;"></div>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="footer-note">Event data via ScrapedDuck, sourced from LeekDuck.com.</div>
+</div>
+
+<script>
+// ---------- Data source ----------
+const EVENTS_URL = "https://raw.githubusercontent.com/bigfoott/ScrapedDuck/data/events.min.json";
+
+const DEFAULT_ZONES = [
+  { id: "Asia/Tokyo", label: "Tokyo" },
+  { id: "America/Sao_Paulo", label: "São Paulo" },
+  { id: "Europe/London", label: "London" },
+  { id: "Europe/Amsterdam", label: "Amsterdam" },
+  { id: "America/New_York", label: "New York" },
+];
+
+const QUICK_ADD = [
+  { id: "America/Los_Angeles", label: "Los Angeles" },
+  { id: "Australia/Sydney", label: "Sydney" },
+  { id: "Asia/Kolkata", label: "Mumbai" },
+  { id: "Asia/Singapore", label: "Singapore" },
+  { id: "Europe/Berlin", label: "Berlin" },
+  { id: "Pacific/Auckland", label: "Auckland" },
+];
+
+// Snapshot used only if the live fetch fails (e.g. offline). Refreshed 2026-07-13.
+const SNAPSHOT_FETCHED_AT = "2026-07-13";
+const EMBEDDED_EVENTS = [
+  { eventID: "special-anniversary-pikachu-celebration-2026", name: "Special Anniversary Pikachu Celebration", eventType: "event", link: "https://leekduck.com/events/special-anniversary-pikachu-celebration-2026/", start: "2026-07-13T10:00:00.000", end: "2026-07-20T20:00:00.000" },
+  { eventID: "mega-lucario-in-mega-raids-july-13-2026", name: "Mega Lucario in Mega Raids", eventType: "raid-battles", link: "https://leekduck.com/events/mega-lucario-in-mega-raids-july-13-2026/", start: "2026-07-13T06:00:00.000", end: "2026-07-14T22:00:00.000" },
+  { eventID: "shadow-palkia-july-2026", name: "Shadow Palkia in Raid Battles", eventType: "raid-battles", link: "https://leekduck.com/raid-bosses/", start: "2026-07-01T06:00:00.000", end: "2026-08-04T22:00:00.000" },
+  { eventID: "go-pass-july-2026", name: "GO Pass: July", eventType: "event", link: "https://leekduck.com/events/go-pass-july-2026/", start: "2026-07-07T10:00:00.000", end: "2026-08-04T10:00:00.000" },
+  { eventID: "raidhour20260715", name: "Kyogre Raid Hour", eventType: "raid-hour", link: "https://leekduck.com/events/raidhour20260715/", start: "2026-07-15T18:00:00.000", end: "2026-07-15T19:00:00.000" },
+  { eventID: "pokemonspotlighthour2026-07-16", name: "Zubat Spotlight Hour", eventType: "pokemon-spotlight-hour", link: "https://leekduck.com/events/pokemonspotlighthour2026-07-16/", start: "2026-07-16T18:00:00.000", end: "2026-07-16T19:00:00.000" },
+  { eventID: "weekend-event-july-2026", name: "Weekend Event", eventType: "event", link: "https://leekduck.com/events/weekend-event-july-2026/", start: "2026-07-18T10:00:00.000", end: "2026-07-18T20:00:00.000" },
+  { eventID: "raid-day-july-2026", name: "Raid Day", eventType: "raid-day", link: "https://leekduck.com/events/", start: "2026-07-18T14:00:00.000", end: "2026-07-18T17:00:00.000" },
+  { eventID: "solgaleo-in-5-star-raid-battles-july-2026", name: "Solgaleo in 5-star Raid Battles", eventType: "raid-battles", link: "https://leekduck.com/events/solgaleo-in-5-star-raid-battles-july-2026/", start: "2026-07-22T06:00:00.000", end: "2026-07-28T22:00:00.000" },
+  { eventID: "raidhour20260722", name: "Solgaleo Raid Hour", eventType: "raid-hour", link: "https://leekduck.com/events/raidhour20260722/", start: "2026-07-22T18:00:00.000", end: "2026-07-22T19:00:00.000" },
+  { eventID: "choose-your-path-fairy-trail-2026", name: "Choose Your Path: Fairy Trail", eventType: "event", link: "https://leekduck.com/events/", start: "2026-07-28T10:00:00.000", end: "2026-08-03T20:00:00.000" },
+  { eventID: "pokemonspotlighthour2026-07-30", name: "Bidoof Spotlight Hour", eventType: "pokemon-spotlight-hour", link: "https://leekduck.com/events/pokemonspotlighthour2026-07-30/", start: "2026-07-30T18:00:00.000", end: "2026-07-30T19:00:00.000" },
+  { eventID: "august-communityday2026", name: "August Community Day", eventType: "community-day", link: "https://leekduck.com/events/", start: "2026-08-15T14:00:00.000", end: "2026-08-15T17:00:00.000" },
+];
+
+const TYPE_COLORS = {
+  "community-day": "#FFB020", "raid-day": "#FF6B4A", "raid-hour": "#FF6B4A", "raid-battles": "#FF6B4A",
+  "spotlight-hour": "#43D9C8", "pokemon-spotlight-hour": "#43D9C8",
+  "research-day": "#8FD14F", "research-breakthrough": "#8FD14F",
+  "event": "#9A8CFF", "season": "#9A8CFF", "default": "#8B93A1",
+};
+function typeColor(t) { return TYPE_COLORS[(t || "").toLowerCase()] || TYPE_COLORS.default; }
+
+function getAllTimeZones() {
+  try { if (typeof Intl.supportedValuesOf === "function") return Intl.supportedValuesOf("timeZone"); }
+  catch (e) {}
+  return DEFAULT_ZONES.concat(QUICK_ADD).map((z) => z.id);
+}
+function cityLabelFromId(id) {
+  const known = DEFAULT_ZONES.concat(QUICK_ADD).find((z) => z.id === id);
+  if (known) return known.label;
+  const parts = id.split("/");
+  return parts[parts.length - 1].replace(/_/g, " ");
+}
+
+// Two timestamp flavors: "Z"-suffixed = true UTC instant; bare = same local
+// wall-clock hour in every timezone (Community Day, Raid Hour, most events).
+function parseEventTime(str) {
+  if (!str) return null;
+  const isUTC = /Z$|[+-]\d{2}:\d{2}$/.test(str);
+  if (isUTC) return { isUTC: true, ms: new Date(str).getTime() };
+  return { isUTC: false, wall: str.slice(0, 19) };
+}
+function zoneWallClockString(date, timeZone) {
+  const p = new Intl.DateTimeFormat("en-CA", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  }).formatToParts(date);
+  const get = (t) => p.find((x) => x.type === t)?.value ?? "00";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}`;
+}
+function wallToPseudoMs(wall) { return new Date(wall + ".000Z").getTime(); }
+function eventIsLive(e, now, timeZone) {
+  if (!e._start || !e._end) return false;
+  if (e._start.isUTC) return e._start.ms <= now.getTime() && e._end.ms >= now.getTime();
+  const wallNow = zoneWallClockString(now, timeZone);
+  return wallNow >= e._start.wall && wallNow <= e._end.wall;
+}
+function eventIsUpcoming(e, now, timeZone) {
+  if (!e._start) return false;
+  if (e._start.isUTC) return e._start.ms > now.getTime();
+  const wallNow = zoneWallClockString(now, timeZone);
+  return wallNow < e._start.wall;
+}
+function eventCountdownMs(target, now, timeZone) {
+  if (target.isUTC) return target.ms - now.getTime();
+  const wallNow = zoneWallClockString(now, timeZone);
+  return wallToPseudoMs(target.wall) - wallToPseudoMs(wallNow);
+}
+function eventLocalLabel(target, timeZone) {
+  if (target.isUTC) {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone, hour: "2-digit", minute: "2-digit", hour12: true, month: "short", day: "2-digit",
+    }).format(new Date(target.ms));
+  }
+  const [datePart, timePart] = target.wall.split("T");
+  const [y, mo, d] = datePart.split("-").map(Number);
+  const [h, mi] = timePart.split(":").map(Number);
+  const dateLabel = new Date(Date.UTC(y, mo - 1, d)).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "2-digit" });
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${dateLabel}, ${h12}:${String(mi).padStart(2, "0")} ${period} local`;
+}
+function fmtParts(date, timeZone) {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone, hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit",
+    weekday: "short", month: "short", day: "2-digit",
+  });
+  const parts = dtf.formatToParts(date);
+  const get = (t) => parts.find((p) => p.type === t)?.value ?? "";
+  return { h: get("hour"), m: get("minute"), s: get("second"), weekday: get("weekday"), month: get("month"), day: get("day") };
+}
+function isDaytime(date, timeZone) {
+  const hour = parseInt(new Intl.DateTimeFormat("en-US", { timeZone, hour12: false, hour: "2-digit" }).format(date), 10);
+  return hour >= 6 && hour < 19;
+}
+function countdown(ms) {
+  if (ms < 0) ms = 0;
+  const totalMin = Math.floor(ms / 60000);
+  const d = Math.floor(totalMin / 1440), h = Math.floor((totalMin % 1440) / 60), m = totalMin % 60;
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// ---------- State ----------
+let zones = DEFAULT_ZONES.slice();
+let events = [];
+let status = "loading"; // loading | live | snapshot
+let allZoneIds = getAllTimeZones();
+let lastSeconds = {}; // zoneId -> last rendered seconds value, for flap animation
+
+function mapEventTimes(data) {
+  return data.filter((e) => e.start && e.end)
+    .map((e) => ({ ...e, _start: parseEventTime(e.start), _end: parseEventTime(e.end) }));
+}
+
+async function loadEvents() {
+  status = "loading";
+  renderStatus();
+  try {
+    const res = await fetch(EVENTS_URL, { cache: "no-store" });
+    if (!res.ok) throw new Error("bad response");
+    const data = await res.json();
+    events = mapEventTimes(data);
+    status = "live";
+  } catch (err) {
+    events = mapEventTimes(EMBEDDED_EVENTS);
+    status = "snapshot";
+  }
+  renderStatus();
+  renderGrid();
+}
+
+function renderStatus() {
+  const dot = document.getElementById("statusDot");
+  const text = document.getElementById("statusText");
+  const banner = document.getElementById("noticeBanner");
+  const colors = { live: "#8FD14F", snapshot: "#FFB020", loading: "#8B93A1" };
+  dot.style.background = colors[status];
+  dot.style.boxShadow = `0 0 8px ${colors[status]}`;
+  if (status === "loading") text.textContent = "Loading events…";
+  else if (status === "live") text.textContent = `${events.length} events loaded (live)`;
+  else text.textContent = `${events.length} events (snapshot from ${SNAPSHOT_FETCHED_AT})`;
+
+  if (status === "snapshot") {
+    banner.innerHTML = `<div class="notice-banner warn">⚠ Live fetch failed (offline, or the feed is unreachable) — showing a fixed snapshot from ${SNAPSHOT_FETCHED_AT}.</div>`;
+  } else {
+    banner.innerHTML = "";
+  }
+}
+
+function addZone(id) {
+  if (!id || zones.find((z) => z.id === id)) return;
+  zones.push({ id, label: cityLabelFromId(id) });
+  document.getElementById("addInput").value = "";
+  hideSuggestions();
+  renderQuickAdd();
+  renderGrid();
+}
+function removeZone(id) {
+  zones = zones.filter((z) => z.id !== id);
+  renderGrid();
+}
+
+function renderQuickAdd() {
+  const row = document.getElementById("quickAddRow");
+  row.innerHTML = QUICK_ADD.filter((q) => !zones.find((z) => z.id === q.id))
+    .map((q) => `<div class="chip" data-zoneid="${esc(q.id)}">+ ${esc(q.label)}</div>`)
+    .join("");
+  row.querySelectorAll(".chip").forEach((el) => {
+    el.addEventListener("click", () => addZone(el.dataset.zoneid));
+  });
+}
+
+function hideSuggestions() {
+  document.getElementById("suggestions").style.display = "none";
+}
+
+function cityCardHTML(zone, now) {
+  const p = fmtParts(now, zone.id);
+  const day = isDaytime(now, zone.id);
+  const live = events.filter((e) => eventIsLive(e, now, zone.id));
+  const upcoming = events.filter((e) => eventIsUpcoming(e, now, zone.id))
+    .sort((a, b) => eventCountdownMs(a._start, now, zone.id) - eventCountdownMs(b._start, now, zone.id))
+    .slice(0, 3);
+
+  const liveHTML = live.length === 0
+    ? `<div class="empty-line">Nothing active</div>`
+    : live.map((e) => `
+      <div class="event-row">
+        <span class="tag" style="background:${typeColor(e.eventType)}"></span>
+        <div class="event-text">
+          <div class="event-name"><a href="${esc(e.link || '#')}" target="_blank" rel="noopener">${esc(e.name)}</a></div>
+          <div class="event-sub">ends ${eventLocalLabel(e._end, zone.id)} · ${countdown(eventCountdownMs(e._end, now, zone.id))} left</div>
+        </div>
+      </div>`).join("");
+
+  const upcomingHTML = upcoming.length === 0 ? "" : `
+    <div class="section-label section-label-upcoming">Next up</div>
+    ${upcoming.map((e) => `
+      <div class="event-row">
+        <span class="tag" style="background:${typeColor(e.eventType)}"></span>
+        <div class="event-text">
+          <div class="event-name"><a href="${esc(e.link || '#')}" target="_blank" rel="noopener">${esc(e.name)}</a></div>
+          <div class="event-sub">starts ${eventLocalLabel(e._start, zone.id)} · in ${countdown(eventCountdownMs(e._start, now, zone.id))}</div>
+        </div>
+      </div>`).join("")}
+  `;
+
+  return `
+    <div class="card" data-zoneid="${esc(zone.id)}">
+      <div class="card-head">
+        <div>
+          <div class="eyebrow">${p.weekday} · ${p.month} ${p.day}</div>
+          <h2 class="city-name">${esc(zone.label)}</h2>
+        </div>
+        <div class="head-right">
+          <span>${day ? "☀" : "☾"}</span>
+          <button class="icon-btn remove-zone-btn" data-zoneid="${esc(zone.id)}" aria-label="Remove ${esc(zone.label)}">✕</button>
+        </div>
+      </div>
+      <div class="clock">
+        <span class="flap-wrap"><span class="flap-digit" data-part="h">${p.h}</span></span><span class="colon">:</span>
+        <span class="flap-wrap"><span class="flap-digit" data-part="m">${p.m}</span></span><span class="colon">:</span>
+        <span class="flap-wrap"><span class="flap-digit" data-part="s">${p.s}</span></span>
+      </div>
+      <div class="divider"></div>
+      <div class="events-block">
+        <div class="section-label">Live now</div>
+        ${liveHTML}
+        ${upcomingHTML}
+      </div>
+    </div>
+  `;
+}
+
+function renderGrid() {
+  const grid = document.getElementById("grid");
+  const now = new Date();
+  grid.innerHTML = zones.map((z) => cityCardHTML(z, now)).join("");
+  grid.querySelectorAll(".remove-zone-btn").forEach((btn) => {
+    btn.addEventListener("click", () => removeZone(btn.dataset.zoneid));
+  });
+}
+
+// Cheap per-second tick: just rewrite the clock digits without rebuilding
+// event lists (those only need to refresh once a minute).
+function tickClocks() {
+  const now = new Date();
+  document.querySelectorAll(".card").forEach((card) => {
+    const zoneId = card.dataset.zoneid;
+    const p = fmtParts(now, zoneId);
+    const hEl = card.querySelector('[data-part="h"]');
+    const mEl = card.querySelector('[data-part="m"]');
+    const sEl = card.querySelector('[data-part="s"]');
+    if (sEl && sEl.textContent !== p.s) {
+      sEl.textContent = p.s;
+      sEl.style.animation = "none"; void sEl.offsetWidth; sEl.style.animation = "";
+    }
+    if (mEl && mEl.textContent !== p.m) {
+      mEl.textContent = p.m;
+      mEl.style.animation = "none"; void mEl.offsetWidth; mEl.style.animation = "";
+    }
+    if (hEl && hEl.textContent !== p.h) {
+      hEl.textContent = p.h;
+      hEl.style.animation = "none"; void hEl.offsetWidth; hEl.style.animation = "";
+    }
+  });
+}
+
+// ---------- Wiring ----------
+document.getElementById("refreshBtn").addEventListener("click", loadEvents);
+
+const addInput = document.getElementById("addInput");
+addInput.addEventListener("input", () => {
+  const q = addInput.value.trim().toLowerCase();
+  const box = document.getElementById("suggestions");
+  if (!q) { hideSuggestions(); return; }
+  const matches = allZoneIds
+    .filter((id) => id.toLowerCase().includes(q) || cityLabelFromId(id).toLowerCase().includes(q))
+    .slice(0, 8);
+  if (matches.length === 0) { hideSuggestions(); return; }
+  box.innerHTML = matches.map((id) => `<div class="suggestion-item" data-zoneid="${esc(id)}">${esc(cityLabelFromId(id))} — ${esc(id)}</div>`).join("");
+  box.style.display = "block";
+  box.querySelectorAll(".suggestion-item").forEach((el) => {
+    el.addEventListener("click", () => addZone(el.dataset.zoneid));
+  });
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".add-input-wrap")) hideSuggestions();
+});
+
+renderQuickAdd();
+loadEvents();
+setInterval(tickClocks, 1000);
+setInterval(renderGrid, 60 * 1000); // refresh event lists every minute
+setInterval(loadEvents, 15 * 60 * 1000); // re-fetch event data every 15 min
+</script>
+</body>
+</html>
