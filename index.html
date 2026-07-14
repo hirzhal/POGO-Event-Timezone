@@ -88,6 +88,31 @@
   }
   .ics-btn:hover { color: #ECEDE9; }
 
+  .custom-panel {
+    margin-top: 14px; background: #14171C; border: 1px solid rgba(255,95,168,0.25);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .custom-panel-head {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: #FF5FA8; margin-bottom: 10px;
+  }
+  .custom-form { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .custom-form .add-input { flex: 1 1 140px; min-width: 110px; }
+  .custom-list { display: flex; flex-direction: column; gap: 6px; }
+  .custom-item {
+    display: flex; justify-content: space-between; align-items: center;
+    background: #0B0D10; border: 1px solid rgba(255,255,255,0.06); border-radius: 6px;
+    padding: 6px 10px; font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #ECEDE9;
+  }
+  .custom-item-meta { color: #8B93A1; }
+  .custom-item .icon-btn { color: #8B93A1; }
+  .custom-empty { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #565D6A; }
+  .custom-badge {
+    display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 9.5px;
+    color: #FF5FA8; border: 1px solid rgba(255,95,168,0.4); border-radius: 4px;
+    padding: 0 4px; vertical-align: middle; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+
   .grid {
     max-width: 1180px; margin: 26px auto 0; display: grid;
     grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 16px;
@@ -170,8 +195,23 @@
       </div>
       <div id="quickAddRow" style="display:contents;"></div>
       <button class="chip" id="copyLinkBtn">🔗 Copy link</button>
+      <button class="chip" id="toggleCustomPanel">+ Custom event</button>
     </div>
     <div class="type-filter-row" id="typeFilterRow"></div>
+
+    <div class="custom-panel" id="customPanel" style="display:none;">
+      <div class="custom-panel-head">Custom &amp; location events</div>
+      <div class="custom-form">
+        <input class="add-input" id="ceName" placeholder="Event name" />
+        <select class="add-input" id="ceZone"></select>
+        <input class="add-input" id="ceDate" type="date" />
+        <input class="add-input" id="ceStart" type="time" />
+        <input class="add-input" id="ceEnd" type="time" />
+        <input class="add-input" id="ceLink" placeholder="Link (optional)" />
+        <button class="chip" id="ceAddBtn">Add event</button>
+      </div>
+      <div class="custom-list" id="customList"></div>
+    </div>
   </div>
 
   <div class="grid" id="grid"></div>
@@ -198,6 +238,7 @@ const QUICK_ADD = [
   { id: "Asia/Singapore", label: "Singapore" },
   { id: "Europe/Berlin", label: "Berlin" },
   { id: "Pacific/Auckland", label: "Auckland" },
+  { id: "Pacific/Honolulu", label: "Hawaii" },
 ];
 
 // Snapshot used only if the live fetch fails (e.g. offline). Refreshed 2026-07-13.
@@ -222,7 +263,7 @@ const TYPE_COLORS = {
   "community-day": "#FFB020", "raid-day": "#FF6B4A", "raid-hour": "#FF6B4A", "raid-battles": "#FF6B4A",
   "spotlight-hour": "#43D9C8", "pokemon-spotlight-hour": "#43D9C8",
   "research-day": "#8FD14F", "research-breakthrough": "#8FD14F",
-  "event": "#9A8CFF", "season": "#9A8CFF", "default": "#8B93A1",
+  "event": "#9A8CFF", "season": "#9A8CFF", "custom": "#FF5FA8", "default": "#8B93A1",
 };
 function typeColor(t) { return TYPE_COLORS[(t || "").toLowerCase()] || TYPE_COLORS.default; }
 
@@ -232,6 +273,7 @@ const TYPE_LABELS = {
   "research-day": "Research Day", "research-breakthrough": "Research Breakthrough",
   "event": "Event", "season": "Season", "go-battle-league": "GO Battle League",
   "pokemon-go-fest": "GO Fest", "max-mondays": "Max Mondays", "max-battles": "Max Battles", "go-pass": "GO Pass",
+  "custom": "Custom / Location",
 };
 function typeLabel(t) {
   if (TYPE_LABELS[t]) return TYPE_LABELS[t];
@@ -242,7 +284,8 @@ function typeLabel(t) {
 let enabledTypes = new Set(); // types currently shown
 let seenTypes = new Set(); // every type we've ever seen, so new ones default to "on"
 function syncTypeFilters() {
-  const types = [...new Set(events.map((e) => e.eventType))].sort();
+  // "custom" is always offered as a filter option, even before any custom event exists.
+  const types = [...new Set(events.map((e) => e.eventType).concat(["custom"]))].sort();
   types.forEach((t) => { if (!seenTypes.has(t)) { seenTypes.add(t); enabledTypes.add(t); } });
   renderTypeFilters(types);
 }
@@ -265,7 +308,8 @@ function renderTypeFilters(types) {
 }
 
 // Converts a wall-clock time meant for a SPECIFIC zone (e.g. "2pm in Tokyo")
-// into a real UTC instant. Needed so per-zone event math stays correct.
+// into a real UTC instant. Needed for reminders: local-everywhere events
+// (Community Day etc.) start at a different absolute moment in each zone.
 function getZoneOffsetMs(date, timeZone) {
   const dtf = new Intl.DateTimeFormat("en-US", {
     timeZone, hour12: false, year: "numeric", month: "2-digit", day: "2-digit",
@@ -331,6 +375,64 @@ function loadInitialZones() {
 function shareableLink() {
   const ids = zones.map((z) => encodeURIComponent(z.id)).join(",");
   return `${location.origin}${location.pathname}?zones=${ids}`;
+}
+
+// ---------- Custom / location events (e.g. things you read about elsewhere,
+// like PokemonGoHub, that aren't in the LeekDuck feed) ----------
+const CUSTOM_STORAGE_KEY = "pogo-board-custom-events";
+let customEvents = loadCustomEvents(); // raw stored form: {id,name,zoneId,date,startTime,endTime,link}
+let customPanelOpen = false;
+
+function loadCustomEvents() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function saveCustomEvents() {
+  try { localStorage.setItem(CUSTOM_STORAGE_KEY, JSON.stringify(customEvents)); }
+  catch (e) { /* ignore */ }
+}
+
+// Turns saved custom events into the same _start/_end shape the LeekDuck feed
+// uses, so they flow through the existing live/upcoming/ICS logic unchanged.
+function customEventsToRuntime() {
+  return customEvents.map((c) => {
+    const wallStart = `${c.date}T${c.startTime}:00`;
+    let wallEnd = `${c.date}T${c.endTime}:00`;
+    if (wallEnd <= wallStart) {
+      const d2 = new Date(c.date + "T00:00:00Z");
+      d2.setUTCDate(d2.getUTCDate() + 1);
+      wallEnd = `${d2.toISOString().slice(0, 10)}T${c.endTime}:00`; // crosses midnight
+    }
+    let startInfo, endInfo;
+    if (c.zoneId) {
+      // pinned to one specific city: a real, single moment in time
+      startInfo = { isUTC: true, ms: zonedWallToUTCms(wallStart, c.zoneId) };
+      endInfo = { isUTC: true, ms: zonedWallToUTCms(wallEnd, c.zoneId) };
+    } else {
+      // "all zones": same local clock hour everywhere, like Community Day
+      startInfo = { isUTC: false, wall: wallStart };
+      endInfo = { isUTC: false, wall: wallEnd };
+    }
+    return {
+      eventID: c.id, name: c.name, eventType: "custom", link: c.link || "",
+      _start: startInfo, _end: endInfo, _customZoneId: c.zoneId || null, isCustom: true,
+    };
+  });
+}
+
+function addCustomEvent(data) {
+  customEvents.push({ id: "c" + Date.now() + Math.random().toString(36).slice(2, 7), ...data });
+  saveCustomEvents();
+  renderCustomList();
+  renderGrid();
+}
+function removeCustomEvent(id) {
+  customEvents = customEvents.filter((c) => c.id !== id);
+  saveCustomEvents();
+  renderCustomList();
+  renderGrid();
 }
 
 // Two timestamp flavors: "Z"-suffixed = true UTC instant; bare = same local
@@ -501,11 +603,13 @@ function addZone(id) {
   document.getElementById("addInput").value = "";
   hideSuggestions();
   renderQuickAdd();
+  renderCustomZoneOptions();
   saveZones();
   renderGrid();
 }
 function removeZone(id) {
   zones = zones.filter((z) => z.id !== id);
+  renderCustomZoneOptions();
   saveZones();
   renderGrid();
 }
@@ -527,7 +631,10 @@ function hideSuggestions() {
 function cityCardHTML(zone, now) {
   const p = fmtParts(now, zone.id);
   const day = isDaytime(now, zone.id);
-  const visibleEvents = events.filter((e) => enabledTypes.has(e.eventType));
+  const mergedEvents = events.concat(
+    customEventsToRuntime().filter((e) => !e._customZoneId || e._customZoneId === zone.id)
+  );
+  const visibleEvents = mergedEvents.filter((e) => enabledTypes.has(e.eventType));
   const live = visibleEvents.filter((e) => eventIsLive(e, now, zone.id));
   const upcoming = visibleEvents.filter((e) => eventIsUpcoming(e, now, zone.id))
     .sort((a, b) => eventCountdownMs(a._start, now, zone.id) - eventCountdownMs(b._start, now, zone.id))
@@ -535,6 +642,7 @@ function cityCardHTML(zone, now) {
 
   const icsBtn = (e) =>
     `<button class="ics-btn" data-eventid="${esc(e.eventID)}" data-zoneid="${esc(zone.id)}" title="Add to calendar">📅</button>`;
+  const nameHTML = (e) => `${esc(e.name)}${e.isCustom ? ' <span class="custom-badge">custom</span>' : ""}`;
 
   const liveHTML = live.length === 0
     ? `<div class="empty-line">Nothing active</div>`
@@ -542,7 +650,7 @@ function cityCardHTML(zone, now) {
       <div class="event-row">
         <span class="tag" style="background:${typeColor(e.eventType)}"></span>
         <div class="event-text">
-          <div class="event-name"><a href="${esc(e.link || '#')}" target="_blank" rel="noopener">${esc(e.name)}</a></div>
+          <div class="event-name"><a href="${esc(e.link || '#')}" target="_blank" rel="noopener">${nameHTML(e)}</a></div>
           <div class="event-sub">ends ${eventLocalLabel(e._end, zone.id)} · ${countdown(eventCountdownMs(e._end, now, zone.id))} left</div>
         </div>
         ${icsBtn(e)}
@@ -554,7 +662,7 @@ function cityCardHTML(zone, now) {
       <div class="event-row">
         <span class="tag" style="background:${typeColor(e.eventType)}"></span>
         <div class="event-text">
-          <div class="event-name"><a href="${esc(e.link || '#')}" target="_blank" rel="noopener">${esc(e.name)}</a></div>
+          <div class="event-name"><a href="${esc(e.link || '#')}" target="_blank" rel="noopener">${nameHTML(e)}</a></div>
           <div class="event-sub">starts ${eventLocalLabel(e._start, zone.id)} · in ${countdown(eventCountdownMs(e._start, now, zone.id))}</div>
         </div>
         ${icsBtn(e)}
@@ -600,7 +708,7 @@ function renderGrid() {
       const eventID = btn.dataset.eventid;
       const zoneId = btn.dataset.zoneid;
       const zone = zones.find((z) => z.id === zoneId);
-      const event = events.find((e) => e.eventID === eventID);
+      const event = events.find((e) => e.eventID === eventID) || customEventsToRuntime().find((e) => e.eventID === eventID);
       if (!zone || !event) return;
       downloadICS(event, zone);
     });
@@ -679,7 +787,63 @@ document.addEventListener("click", (e) => {
   if (!e.target.closest(".add-input-wrap")) hideSuggestions();
 });
 
+function renderCustomZoneOptions() {
+  const sel = document.getElementById("ceZone");
+  const prev = sel.value;
+  sel.innerHTML = `<option value="">All zones (same local time everywhere)</option>` +
+    zones.map((z) => `<option value="${esc(z.id)}">${esc(z.label)}</option>`).join("");
+  if (zones.find((z) => z.id === prev)) sel.value = prev;
+}
+
+function renderCustomList() {
+  const list = document.getElementById("customList");
+  if (customEvents.length === 0) {
+    list.innerHTML = `<div class="custom-empty">No custom events yet — add one above.</div>`;
+    return;
+  }
+  list.innerHTML = customEvents.map((c) => {
+    const zoneLabel = c.zoneId ? cityLabelFromId(c.zoneId) : "All zones";
+    return `
+      <div class="custom-item">
+        <span>${esc(c.name)} <span class="custom-item-meta">— ${esc(zoneLabel)} · ${esc(c.date)} ${esc(c.startTime)}–${esc(c.endTime)}</span></span>
+        <button class="icon-btn remove-custom-btn" data-id="${esc(c.id)}" aria-label="Remove ${esc(c.name)}">✕</button>
+      </div>`;
+  }).join("");
+  list.querySelectorAll(".remove-custom-btn").forEach((btn) => {
+    btn.addEventListener("click", () => removeCustomEvent(btn.dataset.id));
+  });
+}
+
+document.getElementById("toggleCustomPanel").addEventListener("click", () => {
+  customPanelOpen = !customPanelOpen;
+  const panel = document.getElementById("customPanel");
+  panel.style.display = customPanelOpen ? "block" : "none";
+  if (customPanelOpen) {
+    renderCustomZoneOptions();
+    renderCustomList();
+    const dateEl = document.getElementById("ceDate");
+    if (!dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
+  }
+});
+
+document.getElementById("ceAddBtn").addEventListener("click", () => {
+  const name = document.getElementById("ceName").value.trim();
+  const zoneId = document.getElementById("ceZone").value;
+  const date = document.getElementById("ceDate").value;
+  const startTime = document.getElementById("ceStart").value;
+  const endTime = document.getElementById("ceEnd").value;
+  const link = document.getElementById("ceLink").value.trim();
+  if (!name || !date || !startTime || !endTime) {
+    alert("Please fill in the event name, date, start time, and end time.");
+    return;
+  }
+  addCustomEvent({ name, zoneId, date, startTime, endTime, link });
+  document.getElementById("ceName").value = "";
+  document.getElementById("ceLink").value = "";
+});
+
 renderQuickAdd();
+renderCustomZoneOptions();
 loadEvents();
 setInterval(tickClocks, 1000);
 setInterval(renderGrid, 60 * 1000); // refresh event lists every minute
