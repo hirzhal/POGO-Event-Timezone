@@ -68,6 +68,21 @@
   }
   .chip:hover { color: #ECEDE9; border-color: #43D9C8; }
 
+  .reminder-settings {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #8B93A1;
+  }
+  .reminder-settings select {
+    background: #14171C; color: #ECEDE9; border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 6px; padding: 5px 8px; font-family: 'IBM Plex Mono', monospace; font-size: 12px;
+  }
+  .bell-btn {
+    background: none; border: none; cursor: pointer; padding: 2px 4px;
+    font-size: 13px; line-height: 1; color: #565D6A; flex-shrink: 0;
+  }
+  .bell-btn.armed { color: #FFB020; }
+  .bell-btn:hover { color: #ECEDE9; }
+
   .grid {
     max-width: 1180px; margin: 26px auto 0; display: grid;
     grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 16px;
@@ -138,6 +153,17 @@
       <span id="statusText">Loading events…</span>
       <button class="refresh-btn" id="refreshBtn">↻ refresh</button>
     </div>
+    <div class="reminder-settings">
+      <span>🔔 Remind me</span>
+      <select id="leadTimeSelect">
+        <option value="10">10 min</option>
+        <option value="15" selected>15 min</option>
+        <option value="30">30 min</option>
+        <option value="60">1 hour</option>
+      </select>
+      <span>before events start — tap the bell on any upcoming event</span>
+      <span id="notifPermNote"></span>
+    </div>
   </div>
 
   <div id="noticeBanner"></div>
@@ -203,6 +229,35 @@ const TYPE_COLORS = {
   "event": "#9A8CFF", "season": "#9A8CFF", "default": "#8B93A1",
 };
 function typeColor(t) { return TYPE_COLORS[(t || "").toLowerCase()] || TYPE_COLORS.default; }
+
+// Converts a wall-clock time meant for a SPECIFIC zone (e.g. "2pm in Tokyo")
+// into a real UTC instant. Needed for reminders: local-everywhere events
+// (Community Day etc.) start at a different absolute moment in each zone.
+function getZoneOffsetMs(date, timeZone) {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone, hour12: false, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
+  const p = dtf.formatToParts(date);
+  const m = {}; p.forEach((x) => (m[x.type] = x.value));
+  const hour = m.hour === "24" ? 0 : Number(m.hour);
+  const asUTC = Date.UTC(Number(m.year), Number(m.month) - 1, Number(m.day), hour, Number(m.minute), Number(m.second));
+  return asUTC - date.getTime();
+}
+function zonedWallToUTCms(wall, timeZone) {
+  const [datePart, timePart] = wall.split("T");
+  const [y, mo, d] = datePart.split("-").map(Number);
+  const [h, mi, s] = timePart.split(":").map(Number);
+  const guess = Date.UTC(y, mo - 1, d, h, mi, s || 0);
+  let offset = getZoneOffsetMs(new Date(guess), timeZone);
+  let ms = guess - offset;
+  offset = getZoneOffsetMs(new Date(ms), timeZone); // second pass for DST edges
+  return guess - offset;
+}
+// The real-world instant an event starts/ends AS EXPERIENCED in a given zone.
+function eventAbsoluteMs(target, timeZone) {
+  return target.isUTC ? target.ms : zonedWallToUTCms(target.wall, timeZone);
+}
 
 function getAllTimeZones() {
   try { if (typeof Intl.supportedValuesOf === "function") return Intl.supportedValuesOf("timeZone"); }
@@ -296,6 +351,92 @@ let status = "loading"; // loading | live | snapshot
 let allZoneIds = getAllTimeZones();
 let lastSeconds = {}; // zoneId -> last rendered seconds value, for flap animation
 
+// ---------- Reminders ----------
+const REMINDERS_KEY = "pogo-board-reminders";
+let reminders = loadReminders(); // { [eventID::zoneId]: { fireAtMs, name, zoneLabel, notified } }
+
+function loadReminders() {
+  try { return JSON.parse(localStorage.getItem(REMINDERS_KEY) || "{}"); }
+  catch (e) { return {}; }
+}
+function saveReminders() {
+  try { localStorage.setItem(REMINDERS_KEY, JSON.stringify(reminders)); }
+  catch (e) { /* ignore */ }
+}
+function reminderKey(eventID, zoneId) { return `${eventID}::${zoneId}`; }
+
+function armReminder(event, zone) {
+  if (!("Notification" in window)) {
+    alert("This browser doesn't support notifications.");
+    return;
+  }
+  const proceed = (perm) => {
+    if (perm !== "granted") {
+      updateNotifPermNote();
+      return;
+    }
+    const leadMin = Number(document.getElementById("leadTimeSelect").value);
+    const startMs = eventAbsoluteMs(event._start, zone.id);
+    const fireAtMs = startMs - leadMin * 60000;
+    const key = reminderKey(event.eventID, zone.id);
+    if (fireAtMs <= Date.now()) {
+      alert("That event starts too soon for this lead time — try a shorter one.");
+      return;
+    }
+    reminders[key] = { fireAtMs, name: event.name, zoneLabel: zone.label, notified: false };
+    saveReminders();
+    renderGrid();
+  };
+
+  if (Notification.permission === "granted") {
+    proceed("granted");
+  } else {
+    Notification.requestPermission().then(proceed);
+  }
+}
+function disarmReminder(eventID, zoneId) {
+  delete reminders[reminderKey(eventID, zoneId)];
+  saveReminders();
+  renderGrid();
+}
+function isArmed(eventID, zoneId) {
+  const r = reminders[reminderKey(eventID, zoneId)];
+  return !!r && !r.notified;
+}
+
+function checkReminders() {
+  const now = Date.now();
+  let changed = false;
+  for (const key in reminders) {
+    const r = reminders[key];
+    if (!r.notified && now >= r.fireAtMs) {
+      try {
+        const n = new Notification(`${r.name} is starting soon`, {
+          body: `Starting in ${r.zoneLabel} shortly.`,
+        });
+        n.onclick = () => window.focus();
+      } catch (e) { /* notification blocked mid-session, ignore */ }
+      r.notified = true;
+      changed = true;
+    }
+  }
+  // prune anything more than a day past its fire time
+  for (const key in reminders) {
+    if (now - reminders[key].fireAtMs > 24 * 60 * 60 * 1000) { delete reminders[key]; changed = true; }
+  }
+  if (changed) { saveReminders(); renderGrid(); }
+}
+
+function updateNotifPermNote() {
+  const note = document.getElementById("notifPermNote");
+  if (!("Notification" in window)) { note.textContent = ""; return; }
+  if (Notification.permission === "denied") {
+    note.textContent = "— notifications blocked in this browser";
+  } else {
+    note.textContent = "";
+  }
+}
+
 function mapEventTimes(data) {
   return data.filter((e) => e.start && e.end)
     .map((e) => ({ ...e, _start: parseEventTime(e.start), _end: parseEventTime(e.end) }));
@@ -384,14 +525,18 @@ function cityCardHTML(zone, now) {
 
   const upcomingHTML = upcoming.length === 0 ? "" : `
     <div class="section-label section-label-upcoming">Next up</div>
-    ${upcoming.map((e) => `
+    ${upcoming.map((e) => {
+      const armed = isArmed(e.eventID, zone.id);
+      return `
       <div class="event-row">
         <span class="tag" style="background:${typeColor(e.eventType)}"></span>
         <div class="event-text">
           <div class="event-name"><a href="${esc(e.link || '#')}" target="_blank" rel="noopener">${esc(e.name)}</a></div>
           <div class="event-sub">starts ${eventLocalLabel(e._start, zone.id)} · in ${countdown(eventCountdownMs(e._start, now, zone.id))}</div>
         </div>
-      </div>`).join("")}
+        <button class="bell-btn${armed ? " armed" : ""}" data-eventid="${esc(e.eventID)}" data-zoneid="${esc(zone.id)}" title="${armed ? "Cancel reminder" : "Remind me before this starts"}">${armed ? "🔔" : "🔕"}</button>
+      </div>`;
+    }).join("")}
   `;
 
   return `
@@ -427,6 +572,17 @@ function renderGrid() {
   grid.innerHTML = zones.map((z) => cityCardHTML(z, now)).join("");
   grid.querySelectorAll(".remove-zone-btn").forEach((btn) => {
     btn.addEventListener("click", () => removeZone(btn.dataset.zoneid));
+  });
+  grid.querySelectorAll(".bell-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const eventID = btn.dataset.eventid;
+      const zoneId = btn.dataset.zoneid;
+      const zone = zones.find((z) => z.id === zoneId);
+      const event = events.find((e) => e.eventID === eventID);
+      if (!zone || !event) return;
+      if (isArmed(eventID, zoneId)) disarmReminder(eventID, zoneId);
+      else armReminder(event, zone);
+    });
   });
 }
 
@@ -478,10 +634,12 @@ document.addEventListener("click", (e) => {
 });
 
 renderQuickAdd();
+updateNotifPermNote();
 loadEvents();
 setInterval(tickClocks, 1000);
 setInterval(renderGrid, 60 * 1000); // refresh event lists every minute
 setInterval(loadEvents, 15 * 60 * 1000); // re-fetch event data every 15 min
+setInterval(checkReminders, 15 * 1000); // check for due reminders every 15 sec
 </script>
 </body>
 </html>
