@@ -40,6 +40,19 @@
   }
   .refresh-btn:hover { color: #ECEDE9; background: rgba(255,255,255,0.06); }
 
+  .tab-row { max-width: 1180px; margin: 22px auto 0; display: flex; gap: 6px; }
+  .tab-btn {
+    background: #14171C; border: 1px solid rgba(255,255,255,0.09); border-bottom: none;
+    color: #8B93A1; padding: 10px 18px; border-radius: 10px 10px 0 0;
+    font-family: 'Space Grotesk', sans-serif; font-size: 13.5px; font-weight: 600; cursor: pointer;
+  }
+  .tab-btn.active { color: #ECEDE9; background: #1b2027; border-color: rgba(67,217,200,0.35); }
+  .tab-btn:hover:not(.active) { color: #ECEDE9; }
+  .tab-count {
+    display: inline-block; background: rgba(255,95,168,0.15); color: #FF5FA8; border-radius: 10px;
+    padding: 0 6px; font-size: 11px; margin-left: 3px;
+  }
+
   .add-zone { max-width: 1180px; margin: 20px auto 0; position: relative; }
   .add-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .add-input-wrap { position: relative; flex: 1 1 240px; min-width: 200px; }
@@ -105,19 +118,27 @@
     text-transform: uppercase; color: #8B93A1;
   }
   .custom-field .add-input { width: 100%; }
-  .custom-list { display: flex; flex-direction: column; gap: 6px; }
-  .custom-item {
-    display: flex; justify-content: space-between; align-items: center;
-    background: #0B0D10; border: 1px solid rgba(255,255,255,0.06); border-radius: 6px;
-    padding: 6px 10px; font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #ECEDE9;
+  .custom-events-list { max-width: 1180px; margin: 18px auto 0; display: flex; flex-direction: column; gap: 10px; }
+  .custom-event-card {
+    background: #14171C; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px;
+    padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    flex-wrap: wrap;
   }
-  .custom-item-meta { color: #8B93A1; }
-  .custom-item .icon-btn { color: #8B93A1; }
-  .custom-empty { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #565D6A; }
-  .custom-badge {
-    display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 9.5px;
-    color: #FF5FA8; border: 1px solid rgba(255,95,168,0.4); border-radius: 4px;
-    padding: 0 4px; vertical-align: middle; text-transform: uppercase; letter-spacing: 0.05em;
+  .custom-event-card.past { opacity: 0.45; }
+  .custom-event-main { min-width: 0; flex: 1 1 200px; }
+  .custom-event-name { font-size: 15px; font-weight: 700; margin-bottom: 3px; }
+  .custom-event-meta { font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #8B93A1; }
+  .custom-status {
+    font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em;
+    text-transform: uppercase; padding: 3px 9px; border-radius: 12px; white-space: nowrap;
+  }
+  .custom-status.live { background: rgba(143,209,79,0.15); color: #8FD14F; }
+  .custom-status.upcoming { background: rgba(255,176,32,0.15); color: #FFB020; }
+  .custom-status.past { background: rgba(139,147,161,0.15); color: #8B93A1; }
+  .custom-event-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .custom-events-empty {
+    font-family: 'IBM Plex Mono', monospace; color: #565D6A; font-size: 13px;
+    max-width: 1180px; margin: 30px auto; text-align: center;
   }
 
   .grid {
@@ -192,22 +213,32 @@
     </div>
   </div>
 
-  <div id="noticeBanner"></div>
+  <div class="tab-row">
+    <button class="tab-btn active" id="tabClocksBtn">🕐 Clocks</button>
+    <button class="tab-btn" id="tabCustomBtn">📌 Custom Events <span class="tab-count" id="customCount"></span></button>
+  </div>
 
-  <div class="add-zone">
-    <div class="add-row">
-      <div class="add-input-wrap">
-        <input class="add-input" id="addInput" placeholder="Add a timezone or city…" autocomplete="off" />
-        <div class="suggestions" id="suggestions" style="display:none;"></div>
+  <div id="clocksTab">
+    <div id="noticeBanner"></div>
+
+    <div class="add-zone">
+      <div class="add-row">
+        <div class="add-input-wrap">
+          <input class="add-input" id="addInput" placeholder="Add a timezone or city…" autocomplete="off" />
+          <div class="suggestions" id="suggestions" style="display:none;"></div>
+        </div>
+        <div id="quickAddRow" style="display:contents;"></div>
+        <button class="chip" id="copyLinkBtn">🔗 Copy link</button>
       </div>
-      <div id="quickAddRow" style="display:contents;"></div>
-      <button class="chip" id="copyLinkBtn">🔗 Copy link</button>
-      <button class="chip" id="toggleCustomPanel">+ Custom event</button>
+      <div class="type-filter-row" id="typeFilterRow"></div>
     </div>
-    <div class="type-filter-row" id="typeFilterRow"></div>
 
-    <div class="custom-panel" id="customPanel" style="display:none;">
-      <div class="custom-panel-head">Custom &amp; location events</div>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <div id="customTab" style="display:none;">
+    <div class="custom-panel">
+      <div class="custom-panel-head">Add a custom / location event</div>
       <div class="custom-form">
         <div class="custom-form-row">
           <input class="add-input" id="ceName" placeholder="Event name" style="flex:2 1 200px;" />
@@ -224,11 +255,10 @@
           <button class="chip" id="ceAddBtn">Add event</button>
         </div>
       </div>
-      <div class="custom-list" id="customList"></div>
     </div>
-  </div>
 
-  <div class="grid" id="grid"></div>
+    <div class="custom-events-list" id="customEventsList"></div>
+  </div>
 
   <div class="footer-note">Event data via ScrapedDuck, sourced from LeekDuck.com.</div>
 </div>
@@ -298,8 +328,7 @@ function typeLabel(t) {
 let enabledTypes = new Set(); // types currently shown
 let seenTypes = new Set(); // every type we've ever seen, so new ones default to "on"
 function syncTypeFilters() {
-  // "custom" is always offered as a filter option, even before any custom event exists.
-  const types = [...new Set(events.map((e) => e.eventType).concat(["custom"]))].sort();
+  const types = [...new Set(events.map((e) => e.eventType))].sort();
   types.forEach((t) => { if (!seenTypes.has(t)) { seenTypes.add(t); enabledTypes.add(t); } });
   renderTypeFilters(types);
 }
@@ -395,7 +424,6 @@ function shareableLink() {
 // like PokemonGoHub, that aren't in the LeekDuck feed) ----------
 const CUSTOM_STORAGE_KEY = "pogo-board-custom-events";
 let customEvents = loadCustomEvents(); // raw stored form: {id,name,zoneId,date,startTime,endTime,link}
-let customPanelOpen = false;
 
 function loadCustomEvents() {
   try {
@@ -442,14 +470,12 @@ function customEventsToRuntime() {
 function addCustomEvent(data) {
   customEvents.push({ id: "c" + Date.now() + Math.random().toString(36).slice(2, 7), ...data });
   saveCustomEvents();
-  renderCustomList();
-  renderGrid();
+  renderCustomEventsList();
 }
 function removeCustomEvent(id) {
   customEvents = customEvents.filter((c) => c.id !== id);
   saveCustomEvents();
-  renderCustomList();
-  renderGrid();
+  renderCustomEventsList();
 }
 
 // Two timestamp flavors: "Z"-suffixed = true UTC instant; bare = same local
@@ -648,10 +674,7 @@ function hideSuggestions() {
 function cityCardHTML(zone, now) {
   const p = fmtParts(now, zone.id);
   const day = isDaytime(now, zone.id);
-  const mergedEvents = events.concat(
-    customEventsToRuntime().filter((e) => !e._customZoneId || e._customZoneId === zone.id)
-  );
-  const visibleEvents = mergedEvents.filter((e) => enabledTypes.has(e.eventType));
+  const visibleEvents = events.filter((e) => enabledTypes.has(e.eventType));
   const live = visibleEvents.filter((e) => eventIsLive(e, now, zone.id));
   const upcoming = visibleEvents.filter((e) => eventIsUpcoming(e, now, zone.id))
     .sort((a, b) => eventCountdownMs(a._start, now, zone.id) - eventCountdownMs(b._start, now, zone.id))
@@ -659,7 +682,6 @@ function cityCardHTML(zone, now) {
 
   const icsBtn = (e) =>
     `<button class="ics-btn" data-eventid="${esc(e.eventID)}" data-zoneid="${esc(zone.id)}" title="Add to calendar">📅</button>`;
-  const nameHTML = (e) => `${esc(e.name)}${e.isCustom ? ' <span class="custom-badge">custom</span>' : ""}`;
 
   const liveHTML = live.length === 0
     ? `<div class="empty-line">Nothing active</div>`
@@ -667,7 +689,7 @@ function cityCardHTML(zone, now) {
       <div class="event-row">
         <span class="tag" style="background:${typeColor(e.eventType)}"></span>
         <div class="event-text">
-          <div class="event-name"><a href="${esc(e.link || '#')}" target="_blank" rel="noopener">${nameHTML(e)}</a></div>
+          <div class="event-name"><a href="${esc(e.link || '#')}" target="_blank" rel="noopener">${esc(e.name)}</a></div>
           <div class="event-sub">ends ${eventLocalLabel(e._end, zone.id)} · ${countdown(eventCountdownMs(e._end, now, zone.id))} left</div>
         </div>
         ${icsBtn(e)}
@@ -679,7 +701,7 @@ function cityCardHTML(zone, now) {
       <div class="event-row">
         <span class="tag" style="background:${typeColor(e.eventType)}"></span>
         <div class="event-text">
-          <div class="event-name"><a href="${esc(e.link || '#')}" target="_blank" rel="noopener">${nameHTML(e)}</a></div>
+          <div class="event-name"><a href="${esc(e.link || '#')}" target="_blank" rel="noopener">${esc(e.name)}</a></div>
           <div class="event-sub">starts ${eventLocalLabel(e._start, zone.id)} · in ${countdown(eventCountdownMs(e._start, now, zone.id))}</div>
         </div>
         ${icsBtn(e)}
@@ -725,7 +747,7 @@ function renderGrid() {
       const eventID = btn.dataset.eventid;
       const zoneId = btn.dataset.zoneid;
       const zone = zones.find((z) => z.id === zoneId);
-      const event = events.find((e) => e.eventID === eventID) || customEventsToRuntime().find((e) => e.eventID === eventID);
+      const event = events.find((e) => e.eventID === eventID);
       if (!zone || !event) return;
       downloadICS(event, zone);
     });
@@ -812,26 +834,76 @@ function renderCustomZoneOptions() {
   if (zones.find((z) => z.id === prev)) sel.value = prev;
 }
 
-function renderCustomList() {
-  const list = document.getElementById("customList");
+function customEventStatus(runtimeEvent, referenceZone, now) {
+  if (eventIsLive(runtimeEvent, now, referenceZone)) return "live";
+  if (eventIsUpcoming(runtimeEvent, now, referenceZone)) return "upcoming";
+  return "past";
+}
+
+function renderCustomEventsList() {
+  const container = document.getElementById("customEventsList");
+  const countEl = document.getElementById("customCount");
+  countEl.textContent = customEvents.length ? customEvents.length : "";
+
   if (customEvents.length === 0) {
-    list.innerHTML = `<div class="custom-empty">No custom events yet — add one above.</div>`;
+    container.innerHTML = `<div class="custom-events-empty">No custom events yet — add one above.</div>`;
     return;
   }
-  list.innerHTML = customEvents.map((c) => {
-    const zoneLabel = c.zoneId ? cityLabelFromId(c.zoneId) : "All zones";
-    const endDate = c.endDate || c.date;
-    const whenText = endDate === c.date
-      ? `${esc(c.date)} ${esc(c.startTime)}–${esc(c.endTime)}`
-      : `${esc(c.date)} ${esc(c.startTime)} – ${esc(endDate)} ${esc(c.endTime)}`;
+
+  const now = new Date();
+  const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const runtime = customEventsToRuntime();
+
+  const withStatus = customEvents.map((c, i) => {
+    const r = runtime[i];
+    const refZone = c.zoneId || browserZone;
+    return { c, r, refZone, status: customEventStatus(r, refZone, now) };
+  });
+
+  const order = { live: 0, upcoming: 1, past: 2 };
+  withStatus.sort((a, b) => {
+    if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
+    return eventCountdownMs(a.r._start, now, a.refZone) - eventCountdownMs(b.r._start, now, b.refZone);
+  });
+
+  container.innerHTML = withStatus.map(({ c, r, refZone, status }) => {
+    const zoneLabel = c.zoneId ? cityLabelFromId(c.zoneId) : `Local time (${browserZone.split("/").pop().replace(/_/g, " ")})`;
+    let statusText, subText;
+    if (status === "live") {
+      statusText = "Live now";
+      subText = `ends ${eventLocalLabel(r._end, refZone)} · ${countdown(eventCountdownMs(r._end, now, refZone))} left`;
+    } else if (status === "upcoming") {
+      statusText = "Upcoming";
+      subText = `starts ${eventLocalLabel(r._start, refZone)} · in ${countdown(eventCountdownMs(r._start, now, refZone))}`;
+    } else {
+      statusText = "Ended";
+      subText = `ended ${eventLocalLabel(r._end, refZone)}`;
+    }
     return `
-      <div class="custom-item">
-        <span>${esc(c.name)} <span class="custom-item-meta">— ${esc(zoneLabel)} · ${whenText}</span></span>
-        <button class="icon-btn remove-custom-btn" data-id="${esc(c.id)}" aria-label="Remove ${esc(c.name)}">✕</button>
+      <div class="custom-event-card${status === "past" ? " past" : ""}">
+        <div class="custom-event-main">
+          <div class="custom-event-name">${esc(c.name)}</div>
+          <div class="custom-event-meta">${esc(zoneLabel)} · ${subText}</div>
+        </div>
+        <span class="custom-status ${status}">${statusText}</span>
+        <div class="custom-event-actions">
+          <button class="ics-btn custom-ics-btn" data-id="${esc(c.id)}" title="Add to calendar">📅</button>
+          <button class="icon-btn remove-custom-btn" data-id="${esc(c.id)}" aria-label="Remove ${esc(c.name)}">✕</button>
+        </div>
       </div>`;
   }).join("");
-  list.querySelectorAll(".remove-custom-btn").forEach((btn) => {
+
+  container.querySelectorAll(".remove-custom-btn").forEach((btn) => {
     btn.addEventListener("click", () => removeCustomEvent(btn.dataset.id));
+  });
+  container.querySelectorAll(".custom-ics-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const c = customEvents.find((x) => x.id === btn.dataset.id);
+      if (!c) return;
+      const r = customEventsToRuntime().find((x) => x.eventID === c.id);
+      const zoneId = c.zoneId || Intl.DateTimeFormat().resolvedOptions().timeZone;
+      downloadICS(r, { id: zoneId, label: c.zoneId ? cityLabelFromId(c.zoneId) : "Local" });
+    });
   });
 }
 
@@ -844,23 +916,28 @@ document.getElementById("ceDate").addEventListener("input", () => {
   if (!endDateTouched) endDateEl.value = dateEl.value;
 });
 
-document.getElementById("toggleCustomPanel").addEventListener("click", () => {
-  customPanelOpen = !customPanelOpen;
-  const panel = document.getElementById("customPanel");
-  panel.style.display = customPanelOpen ? "block" : "none";
-  if (customPanelOpen) {
+function switchTab(tab) {
+  document.getElementById("clocksTab").style.display = tab === "clocks" ? "block" : "none";
+  document.getElementById("customTab").style.display = tab === "custom" ? "block" : "none";
+  document.getElementById("tabClocksBtn").classList.toggle("active", tab === "clocks");
+  document.getElementById("tabCustomBtn").classList.toggle("active", tab === "custom");
+  if (tab === "custom") {
     renderCustomZoneOptions();
-    renderCustomList();
-    const dateEl = document.getElementById("ceDate");
-    const endDateEl = document.getElementById("ceEndDate");
-    if (!dateEl.value) {
-      const today = new Date().toISOString().slice(0, 10);
-      dateEl.value = today;
-      endDateEl.value = today;
-      endDateEl.min = today;
-    }
+    renderCustomEventsList();
   }
-});
+}
+document.getElementById("tabClocksBtn").addEventListener("click", () => switchTab("clocks"));
+document.getElementById("tabCustomBtn").addEventListener("click", () => switchTab("custom"));
+
+// default the date fields to today once, up front
+(() => {
+  const dateEl = document.getElementById("ceDate");
+  const endDateEl = document.getElementById("ceEndDate");
+  const today = new Date().toISOString().slice(0, 10);
+  dateEl.value = today;
+  endDateEl.value = today;
+  endDateEl.min = today;
+})();
 
 document.getElementById("ceAddBtn").addEventListener("click", () => {
   const name = document.getElementById("ceName").value.trim();
@@ -885,9 +962,11 @@ document.getElementById("ceAddBtn").addEventListener("click", () => {
 
 renderQuickAdd();
 renderCustomZoneOptions();
+renderCustomEventsList();
 loadEvents();
 setInterval(tickClocks, 1000);
 setInterval(renderGrid, 60 * 1000); // refresh event lists every minute
+setInterval(renderCustomEventsList, 60 * 1000); // keep custom-event statuses fresh
 setInterval(loadEvents, 15 * 60 * 1000); // re-fetch event data every 15 min
 </script>
 </body>
