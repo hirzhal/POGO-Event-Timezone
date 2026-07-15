@@ -96,8 +96,15 @@
     font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.1em;
     text-transform: uppercase; color: #FF5FA8; margin-bottom: 10px;
   }
-  .custom-form { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-  .custom-form .add-input { flex: 1 1 140px; min-width: 110px; }
+  .custom-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .custom-form-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .custom-form-row .add-input { flex: 1 1 140px; min-width: 110px; }
+  .custom-field {
+    display: flex; flex-direction: column; gap: 3px; flex: 1 1 110px;
+    font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; letter-spacing: 0.05em;
+    text-transform: uppercase; color: #8B93A1;
+  }
+  .custom-field .add-input { width: 100%; }
   .custom-list { display: flex; flex-direction: column; gap: 6px; }
   .custom-item {
     display: flex; justify-content: space-between; align-items: center;
@@ -202,13 +209,20 @@
     <div class="custom-panel" id="customPanel" style="display:none;">
       <div class="custom-panel-head">Custom &amp; location events</div>
       <div class="custom-form">
-        <input class="add-input" id="ceName" placeholder="Event name" />
-        <select class="add-input" id="ceZone"></select>
-        <input class="add-input" id="ceDate" type="date" />
-        <input class="add-input" id="ceStart" type="time" />
-        <input class="add-input" id="ceEnd" type="time" />
-        <input class="add-input" id="ceLink" placeholder="Link (optional)" />
-        <button class="chip" id="ceAddBtn">Add event</button>
+        <div class="custom-form-row">
+          <input class="add-input" id="ceName" placeholder="Event name" style="flex:2 1 200px;" />
+          <select class="add-input" id="ceZone"></select>
+        </div>
+        <div class="custom-form-row">
+          <label class="custom-field">Start date<input class="add-input" id="ceDate" type="date" /></label>
+          <label class="custom-field">Start time<input class="add-input" id="ceStart" type="time" /></label>
+          <label class="custom-field">End date<input class="add-input" id="ceEndDate" type="date" /></label>
+          <label class="custom-field">End time<input class="add-input" id="ceEnd" type="time" /></label>
+        </div>
+        <div class="custom-form-row">
+          <input class="add-input" id="ceLink" placeholder="Link (optional)" style="flex:1 1 200px;" />
+          <button class="chip" id="ceAddBtn">Add event</button>
+        </div>
       </div>
       <div class="custom-list" id="customList"></div>
     </div>
@@ -398,12 +412,15 @@ function saveCustomEvents() {
 // uses, so they flow through the existing live/upcoming/ICS logic unchanged.
 function customEventsToRuntime() {
   return customEvents.map((c) => {
+    const endDate = c.endDate || c.date; // backward-compat: older saved entries have no endDate
     const wallStart = `${c.date}T${c.startTime}:00`;
-    let wallEnd = `${c.date}T${c.endTime}:00`;
-    if (wallEnd <= wallStart) {
+    let wallEnd = `${endDate}T${c.endTime}:00`;
+    if (!c.endDate && wallEnd <= wallStart) {
+      // backward-compat only: old entries had no end-date field, so a same-day
+      // end time earlier than the start time was assumed to mean "next day"
       const d2 = new Date(c.date + "T00:00:00Z");
       d2.setUTCDate(d2.getUTCDate() + 1);
-      wallEnd = `${d2.toISOString().slice(0, 10)}T${c.endTime}:00`; // crosses midnight
+      wallEnd = `${d2.toISOString().slice(0, 10)}T${c.endTime}:00`;
     }
     let startInfo, endInfo;
     if (c.zoneId) {
@@ -803,9 +820,13 @@ function renderCustomList() {
   }
   list.innerHTML = customEvents.map((c) => {
     const zoneLabel = c.zoneId ? cityLabelFromId(c.zoneId) : "All zones";
+    const endDate = c.endDate || c.date;
+    const whenText = endDate === c.date
+      ? `${esc(c.date)} ${esc(c.startTime)}–${esc(c.endTime)}`
+      : `${esc(c.date)} ${esc(c.startTime)} – ${esc(endDate)} ${esc(c.endTime)}`;
     return `
       <div class="custom-item">
-        <span>${esc(c.name)} <span class="custom-item-meta">— ${esc(zoneLabel)} · ${esc(c.date)} ${esc(c.startTime)}–${esc(c.endTime)}</span></span>
+        <span>${esc(c.name)} <span class="custom-item-meta">— ${esc(zoneLabel)} · ${whenText}</span></span>
         <button class="icon-btn remove-custom-btn" data-id="${esc(c.id)}" aria-label="Remove ${esc(c.name)}">✕</button>
       </div>`;
   }).join("");
@@ -813,6 +834,15 @@ function renderCustomList() {
     btn.addEventListener("click", () => removeCustomEvent(btn.dataset.id));
   });
 }
+
+let endDateTouched = false;
+document.getElementById("ceEndDate").addEventListener("input", () => { endDateTouched = true; });
+document.getElementById("ceDate").addEventListener("input", () => {
+  const dateEl = document.getElementById("ceDate");
+  const endDateEl = document.getElementById("ceEndDate");
+  endDateEl.min = dateEl.value;
+  if (!endDateTouched) endDateEl.value = dateEl.value;
+});
 
 document.getElementById("toggleCustomPanel").addEventListener("click", () => {
   customPanelOpen = !customPanelOpen;
@@ -822,7 +852,13 @@ document.getElementById("toggleCustomPanel").addEventListener("click", () => {
     renderCustomZoneOptions();
     renderCustomList();
     const dateEl = document.getElementById("ceDate");
-    if (!dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
+    const endDateEl = document.getElementById("ceEndDate");
+    if (!dateEl.value) {
+      const today = new Date().toISOString().slice(0, 10);
+      dateEl.value = today;
+      endDateEl.value = today;
+      endDateEl.min = today;
+    }
   }
 });
 
@@ -830,6 +866,7 @@ document.getElementById("ceAddBtn").addEventListener("click", () => {
   const name = document.getElementById("ceName").value.trim();
   const zoneId = document.getElementById("ceZone").value;
   const date = document.getElementById("ceDate").value;
+  const endDate = document.getElementById("ceEndDate").value || date;
   const startTime = document.getElementById("ceStart").value;
   const endTime = document.getElementById("ceEnd").value;
   const link = document.getElementById("ceLink").value.trim();
@@ -837,7 +874,11 @@ document.getElementById("ceAddBtn").addEventListener("click", () => {
     alert("Please fill in the event name, date, start time, and end time.");
     return;
   }
-  addCustomEvent({ name, zoneId, date, startTime, endTime, link });
+  if (endDate < date || (endDate === date && endTime <= startTime)) {
+    alert("The end date/time needs to be after the start date/time.");
+    return;
+  }
+  addCustomEvent({ name, zoneId, date, endDate, startTime, endTime, link });
   document.getElementById("ceName").value = "";
   document.getElementById("ceLink").value = "";
 });
