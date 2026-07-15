@@ -154,6 +154,9 @@
     max-width: 1180px; margin: 26px auto 0; display: grid;
     grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 16px;
   }
+  .grid.events-hidden .divider,
+  .grid.events-hidden .events-block { display: none; }
+  .grid.events-hidden .card { padding-bottom: 20px; }
   .card { background: #14171C; border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 18px 18px 16px; }
   .card-head { display: flex; justify-content: space-between; align-items: flex-start; }
   .head-right { display: flex; align-items: center; gap: 8px; color: #8B93A1; }
@@ -238,6 +241,7 @@
         </div>
         <div id="quickAddRow" style="display:contents;"></div>
         <button class="chip" id="copyLinkBtn">🔗 Copy link</button>
+        <button class="chip" id="toggleEventsBtn">Hide events</button>
       </div>
       <div class="type-filter-row" id="typeFilterRow"></div>
     </div>
@@ -818,6 +822,28 @@ document.getElementById("copyLinkBtn").addEventListener("click", async (e) => {
   }
   setTimeout(() => { btn.textContent = original; }, 1800);
 });
+
+// ---------- Hide/show event lists on the Clocks tab (persisted) ----------
+const EVENTS_HIDDEN_KEY = "pogo-board-events-hidden";
+function loadEventsHidden() {
+  try { return localStorage.getItem(EVENTS_HIDDEN_KEY) === "1"; }
+  catch (e) { return false; }
+}
+function saveEventsHidden(v) {
+  try { localStorage.setItem(EVENTS_HIDDEN_KEY, v ? "1" : "0"); }
+  catch (e) { /* ignore */ }
+}
+let eventsHidden = loadEventsHidden();
+function applyEventsHiddenState() {
+  document.getElementById("grid").classList.toggle("events-hidden", eventsHidden);
+  document.getElementById("toggleEventsBtn").textContent = eventsHidden ? "Show events" : "Hide events";
+}
+document.getElementById("toggleEventsBtn").addEventListener("click", () => {
+  eventsHidden = !eventsHidden;
+  saveEventsHidden(eventsHidden);
+  applyEventsHiddenState();
+});
+applyEventsHiddenState();
 
 const addInput = document.getElementById("addInput");
 addInput.addEventListener("input", () => {
