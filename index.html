@@ -105,10 +105,19 @@
     margin-top: 14px; background: #14171C; border: 1px solid rgba(255,95,168,0.25);
     border-radius: 10px; padding: 14px 16px;
   }
+  .custom-panel-head-row {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+  }
   .custom-panel-head {
     font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.1em;
-    text-transform: uppercase; color: #FF5FA8; margin-bottom: 10px;
+    text-transform: uppercase; color: #FF5FA8; margin-bottom: 0;
   }
+  .custom-panel-toggle {
+    background: none; border: 1px solid rgba(255,95,168,0.3); color: #FF5FA8;
+    font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.05em;
+    text-transform: uppercase; padding: 3px 10px; border-radius: 12px; cursor: pointer;
+  }
+  .custom-panel-toggle:hover { background: rgba(255,95,168,0.1); }
   .custom-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
   .custom-form-row { display: flex; gap: 8px; flex-wrap: wrap; }
   .custom-form-row .add-input { flex: 1 1 140px; min-width: 110px; }
@@ -238,8 +247,11 @@
 
   <div id="customTab" style="display:none;">
     <div class="custom-panel">
-      <div class="custom-panel-head">Add a custom / location event</div>
-      <div class="custom-form">
+      <div class="custom-panel-head-row">
+        <div class="custom-panel-head">Add a custom / location event</div>
+        <button class="custom-panel-toggle" id="toggleAddForm">Hide</button>
+      </div>
+      <div class="custom-form" id="ceFormWrapper">
         <div class="custom-form-row">
           <input class="add-input" id="ceName" placeholder="Event name" style="flex:2 1 200px;" />
           <select class="add-input" id="ceZone"></select>
@@ -928,6 +940,28 @@ function switchTab(tab) {
 }
 document.getElementById("tabClocksBtn").addEventListener("click", () => switchTab("clocks"));
 document.getElementById("tabCustomBtn").addEventListener("click", () => switchTab("custom"));
+
+// ---------- Collapse the add-event form (persisted, so "just show me my list" sticks) ----------
+const ADD_FORM_COLLAPSED_KEY = "pogo-board-add-form-collapsed";
+function loadAddFormCollapsed() {
+  try { return localStorage.getItem(ADD_FORM_COLLAPSED_KEY) === "1"; }
+  catch (e) { return false; }
+}
+function saveAddFormCollapsed(v) {
+  try { localStorage.setItem(ADD_FORM_COLLAPSED_KEY, v ? "1" : "0"); }
+  catch (e) { /* ignore */ }
+}
+let addFormCollapsed = loadAddFormCollapsed();
+function applyAddFormCollapsedState() {
+  document.getElementById("ceFormWrapper").style.display = addFormCollapsed ? "none" : "flex";
+  document.getElementById("toggleAddForm").textContent = addFormCollapsed ? "Show" : "Hide";
+}
+document.getElementById("toggleAddForm").addEventListener("click", () => {
+  addFormCollapsed = !addFormCollapsed;
+  saveAddFormCollapsed(addFormCollapsed);
+  applyAddFormCollapsedState();
+});
+applyAddFormCollapsedState();
 
 // default the date fields to today once, up front
 (() => {
