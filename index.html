@@ -160,6 +160,7 @@
   .card { background: #14171C; border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 18px 18px 16px; }
   .card-head { display: flex; justify-content: space-between; align-items: flex-start; }
   .head-right { display: flex; align-items: center; gap: 8px; color: #8B93A1; }
+  .day-night-icon { user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; }
   .icon-btn {
     background: none; border: none; color: #8B93A1; cursor: pointer;
     padding: 2px; border-radius: 4px; display: inline-flex; font-size: 14px; line-height: 1;
@@ -192,6 +193,7 @@
   }
   .section-label-upcoming { color: #8B93A1; margin-top: 14px; }
   .empty-line { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #565D6A; margin-bottom: 6px; }
+  .empty-line.error-text { color: #FF9C86; }
   .event-row { display: flex; gap: 9px; margin-bottom: 9px; }
   .tag { width: 4px; border-radius: 3px; flex-shrink: 0; }
   .event-text { min-width: 0; }
@@ -205,6 +207,7 @@
     padding: 10px 14px; border-radius: 8px; font-size: 12.5px; font-family: 'IBM Plex Mono', monospace;
   }
   .notice-banner.warn { background: rgba(255,176,32,0.08); border: 1px solid rgba(255,176,32,0.25); color: #FFD08A; }
+  .notice-banner.error { background: rgba(255,107,74,0.08); border: 1px solid rgba(255,107,74,0.25); color: #FF9C86; }
 
   .footer-note {
     max-width: 1180px; margin: 26px auto 0; font-family: 'IBM Plex Mono', monospace;
@@ -224,6 +227,8 @@
       <button class="refresh-btn" id="refreshBtn">↻ refresh</button>
     </div>
   </div>
+
+  <div id="storageWarningBanner"></div>
 
   <div class="tab-row">
     <button class="tab-btn active" id="tabClocksBtn">🕐 Clocks</button>
@@ -301,23 +306,6 @@ const QUICK_ADD = [
   { id: "Pacific/Honolulu", label: "Hawaii" },
 ];
 
-// Snapshot used only if the live fetch fails (e.g. offline). Refreshed 2026-07-13.
-const SNAPSHOT_FETCHED_AT = "2026-07-13";
-const EMBEDDED_EVENTS = [
-  { eventID: "special-anniversary-pikachu-celebration-2026", name: "Special Anniversary Pikachu Celebration", eventType: "event", link: "https://leekduck.com/events/special-anniversary-pikachu-celebration-2026/", start: "2026-07-13T10:00:00.000", end: "2026-07-20T20:00:00.000" },
-  { eventID: "mega-lucario-in-mega-raids-july-13-2026", name: "Mega Lucario in Mega Raids", eventType: "raid-battles", link: "https://leekduck.com/events/mega-lucario-in-mega-raids-july-13-2026/", start: "2026-07-13T06:00:00.000", end: "2026-07-14T22:00:00.000" },
-  { eventID: "shadow-palkia-july-2026", name: "Shadow Palkia in Raid Battles", eventType: "raid-battles", link: "https://leekduck.com/raid-bosses/", start: "2026-07-01T06:00:00.000", end: "2026-08-04T22:00:00.000" },
-  { eventID: "go-pass-july-2026", name: "GO Pass: July", eventType: "event", link: "https://leekduck.com/events/go-pass-july-2026/", start: "2026-07-07T10:00:00.000", end: "2026-08-04T10:00:00.000" },
-  { eventID: "raidhour20260715", name: "Kyogre Raid Hour", eventType: "raid-hour", link: "https://leekduck.com/events/raidhour20260715/", start: "2026-07-15T18:00:00.000", end: "2026-07-15T19:00:00.000" },
-  { eventID: "pokemonspotlighthour2026-07-16", name: "Zubat Spotlight Hour", eventType: "pokemon-spotlight-hour", link: "https://leekduck.com/events/pokemonspotlighthour2026-07-16/", start: "2026-07-16T18:00:00.000", end: "2026-07-16T19:00:00.000" },
-  { eventID: "weekend-event-july-2026", name: "Weekend Event", eventType: "event", link: "https://leekduck.com/events/weekend-event-july-2026/", start: "2026-07-18T10:00:00.000", end: "2026-07-18T20:00:00.000" },
-  { eventID: "raid-day-july-2026", name: "Raid Day", eventType: "raid-day", link: "https://leekduck.com/events/", start: "2026-07-18T14:00:00.000", end: "2026-07-18T17:00:00.000" },
-  { eventID: "solgaleo-in-5-star-raid-battles-july-2026", name: "Solgaleo in 5-star Raid Battles", eventType: "raid-battles", link: "https://leekduck.com/events/solgaleo-in-5-star-raid-battles-july-2026/", start: "2026-07-22T06:00:00.000", end: "2026-07-28T22:00:00.000" },
-  { eventID: "raidhour20260722", name: "Solgaleo Raid Hour", eventType: "raid-hour", link: "https://leekduck.com/events/raidhour20260722/", start: "2026-07-22T18:00:00.000", end: "2026-07-22T19:00:00.000" },
-  { eventID: "choose-your-path-fairy-trail-2026", name: "Choose Your Path: Fairy Trail", eventType: "event", link: "https://leekduck.com/events/", start: "2026-07-28T10:00:00.000", end: "2026-08-03T20:00:00.000" },
-  { eventID: "pokemonspotlighthour2026-07-30", name: "Bidoof Spotlight Hour", eventType: "pokemon-spotlight-hour", link: "https://leekduck.com/events/pokemonspotlighthour2026-07-30/", start: "2026-07-30T18:00:00.000", end: "2026-07-30T19:00:00.000" },
-  { eventID: "august-communityday2026", name: "August Community Day", eventType: "community-day", link: "https://leekduck.com/events/", start: "2026-08-15T14:00:00.000", end: "2026-08-15T17:00:00.000" },
-];
 
 const TYPE_COLORS = {
   "community-day": "#FFB020", "raid-day": "#FF6B4A", "raid-hour": "#FF6B4A", "raid-battles": "#FF6B4A",
@@ -411,7 +399,7 @@ function cityLabelFromId(id) {
 const ZONES_STORAGE_KEY = "pogo-board-zones";
 function saveZones() {
   try { localStorage.setItem(ZONES_STORAGE_KEY, JSON.stringify(zones.map((z) => z.id))); }
-  catch (e) { /* ignore */ }
+  catch (e) { notifyStorageIssue(); }
 }
 function loadInitialZones() {
   try {
@@ -428,7 +416,7 @@ function loadInitialZones() {
     if (Array.isArray(saved) && saved.length) {
       return saved.map((id) => ({ id, label: cityLabelFromId(id) }));
     }
-  } catch (e) { /* fall through to defaults */ }
+  } catch (e) { notifyStorageIssue(); }
   return DEFAULT_ZONES.slice();
 }
 function shareableLink() {
@@ -445,11 +433,11 @@ function loadCustomEvents() {
   try {
     const raw = localStorage.getItem(CUSTOM_STORAGE_KEY);
     return raw ? JSON.parse(raw) : [];
-  } catch (e) { return []; }
+  } catch (e) { notifyStorageIssue(); return []; }
 }
 function saveCustomEvents() {
   try { localStorage.setItem(CUSTOM_STORAGE_KEY, JSON.stringify(customEvents)); }
-  catch (e) { /* ignore */ }
+  catch (e) { notifyStorageIssue(); }
 }
 
 // Turns saved custom events into the same _start/_end shape the LeekDuck feed
@@ -567,6 +555,20 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// ---------- Storage-failure notice ----------
+// Shown once (not per-failure) if localStorage is blocked/unavailable, so
+// silently-lost preferences don't go unnoticed (private browsing, disabled
+// storage, quota exceeded, etc. all throw here instead of just failing quietly).
+let storageWarningShown = false;
+function notifyStorageIssue() {
+  if (storageWarningShown) return;
+  storageWarningShown = true;
+  const el = document.getElementById("storageWarningBanner");
+  if (el) {
+    el.innerHTML = `<div class="notice-banner warn">⚠ This browser is blocking local storage, so your zones, filters, and custom events won't be saved between visits.</div>`;
+  }
+}
+
 // ---------- State ----------
 let zones = loadInitialZones();
 let events = [];
@@ -630,8 +632,8 @@ async function loadEvents() {
     events = mapEventTimes(data);
     status = "live";
   } catch (err) {
-    events = mapEventTimes(EMBEDDED_EVENTS);
-    status = "snapshot";
+    events = [];
+    status = "error";
   }
   renderStatus();
   syncTypeFilters();
@@ -642,15 +644,15 @@ function renderStatus() {
   const dot = document.getElementById("statusDot");
   const text = document.getElementById("statusText");
   const banner = document.getElementById("noticeBanner");
-  const colors = { live: "#8FD14F", snapshot: "#FFB020", loading: "#8B93A1" };
+  const colors = { live: "#8FD14F", error: "#FF6B4A", loading: "#8B93A1" };
   dot.style.background = colors[status];
   dot.style.boxShadow = `0 0 8px ${colors[status]}`;
   if (status === "loading") text.textContent = "Loading events…";
   else if (status === "live") text.textContent = `${events.length} events loaded (live)`;
-  else text.textContent = `${events.length} events (snapshot from ${SNAPSHOT_FETCHED_AT})`;
+  else text.textContent = "Couldn't load event data";
 
-  if (status === "snapshot") {
-    banner.innerHTML = `<div class="notice-banner warn">⚠ Live fetch failed (offline, or the feed is unreachable) — showing a fixed snapshot from ${SNAPSHOT_FETCHED_AT}.</div>`;
+  if (status === "error") {
+    banner.innerHTML = `<div class="notice-banner error">⚠ Couldn't reach the event data source. Clocks are still live — tap ↻ refresh to try again.</div>`;
   } else {
     banner.innerHTML = "";
   }
@@ -699,7 +701,9 @@ function cityCardHTML(zone, now) {
   const icsBtn = (e) =>
     `<button class="ics-btn" data-eventid="${esc(e.eventID)}" data-zoneid="${esc(zone.id)}" title="Add to calendar">📅</button>`;
 
-  const liveHTML = live.length === 0
+  const liveHTML = status === "error"
+    ? `<div class="empty-line error-text">⚠ Couldn't load events</div>`
+    : live.length === 0
     ? `<div class="empty-line">Nothing active</div>`
     : live.map((e) => `
       <div class="event-row">
@@ -711,7 +715,7 @@ function cityCardHTML(zone, now) {
         ${icsBtn(e)}
       </div>`).join("");
 
-  const upcomingHTML = upcoming.length === 0 ? "" : `
+  const upcomingHTML = (status === "error" || upcoming.length === 0) ? "" : `
     <div class="section-label section-label-upcoming">Next up</div>
     ${upcoming.map((e) => `
       <div class="event-row">
@@ -732,7 +736,7 @@ function cityCardHTML(zone, now) {
           <h2 class="city-name">${esc(zone.label)}</h2>
         </div>
         <div class="head-right">
-          <span>${day ? "☀" : "☾"}</span>
+          <span class="day-night-icon">${day ? "☀" : "☾"}</span>
           <button class="icon-btn remove-zone-btn" data-zoneid="${esc(zone.id)}" aria-label="Remove ${esc(zone.label)}">✕</button>
         </div>
       </div>
@@ -827,11 +831,11 @@ document.getElementById("copyLinkBtn").addEventListener("click", async (e) => {
 const EVENTS_HIDDEN_KEY = "pogo-board-events-hidden";
 function loadEventsHidden() {
   try { return localStorage.getItem(EVENTS_HIDDEN_KEY) === "1"; }
-  catch (e) { return false; }
+  catch (e) { notifyStorageIssue(); return false; }
 }
 function saveEventsHidden(v) {
   try { localStorage.setItem(EVENTS_HIDDEN_KEY, v ? "1" : "0"); }
-  catch (e) { /* ignore */ }
+  catch (e) { notifyStorageIssue(); }
 }
 let eventsHidden = loadEventsHidden();
 function applyEventsHiddenState() {
@@ -971,11 +975,11 @@ document.getElementById("tabCustomBtn").addEventListener("click", () => switchTa
 const ADD_FORM_COLLAPSED_KEY = "pogo-board-add-form-collapsed";
 function loadAddFormCollapsed() {
   try { return localStorage.getItem(ADD_FORM_COLLAPSED_KEY) === "1"; }
-  catch (e) { return false; }
+  catch (e) { notifyStorageIssue(); return false; }
 }
 function saveAddFormCollapsed(v) {
   try { localStorage.setItem(ADD_FORM_COLLAPSED_KEY, v ? "1" : "0"); }
-  catch (e) { /* ignore */ }
+  catch (e) { notifyStorageIssue(); }
 }
 let addFormCollapsed = loadAddFormCollapsed();
 function applyAddFormCollapsedState() {
